@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Pulse v2 | Global Ops</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Exo 2', sans-serif;
+            background: radial-gradient(circle at top left, #1e1b4b, #0f172a, #000000);
+        }
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-sidebar {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .glass-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(56, 189, 248, 0.3);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
+        }
+
+        /* Map Dots */
+        .map-dot {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #3b82f6;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px #3b82f6;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .map-dot.down {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+
+        .map-dot::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid currentColor;
+            opacity: 0.5;
+            animation: ripple 2s infinite;
+        }
+
+        @keyframes ripple {
+            0% {
+                width: 12px;
+                height: 12px;
+                opacity: 1;
+                border-width: 2px;
+            }
+
+            100% {
+                width: 40px;
+                height: 40px;
+                opacity: 0;
+                border-width: 0px;
+            }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+
+<body class="text-gray-200 h-screen flex overflow-hidden selection:bg-cyan-500 selection:text-white">
+
+    <!-- Sidebar -->
+    <aside class="w-64 glass-sidebar flex flex-col h-full z-20 hidden md:flex flex-shrink-0">
+        <div class="p-6 border-b border-white/5 flex items-center gap-3">
+            <div
+                class="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+            </div>
+            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">Cloud
+                Pulse</h1>
+        </div>
+
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">Dashboard</div>
+            <button onclick="switchTab('overview')" id="nav-overview"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Global Overview</span>
+            </button>
+
+            <button onclick="switchTab('health')" id="nav-health"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Server Health</span>
+            </button>
+
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6 mb-2 px-2">Server Locations
+            </div>
+            <div id="location-list" class="space-y-1">
+                <!-- Locations injected here -->
+                <div class="animate-pulse h-4 bg-white/5 rounded w-3/4 mx-2"></div>
+                <div class="animate-pulse h-4 bg-white/5 rounded w-1/2 mx-2"></div>
+            </div>
+        </nav>
+
+        <div class="p-4 border-t border-white/5 bg-black/20">
+            <div class="flex items-center gap-3">
+                <div class="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">JD
+                </div>
+                <div>
+                    <div class="text-sm font-medium text-gray-200">Admin User</div>
+                    <div class="text-xs text-green-400">Online</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full relative overflow-y-auto overflow-x-hidden">
+
+        <!-- Header -->
+        <header
+            class="h-16 glass-panel sticky top-0 z-10 flex items-center justify-between px-6 border-b border-white/5">
+            <h2 class="text-lg font-semibold text-gray-100">Operation Center</h2>
+            <div class="flex items-center gap-4">
+                <div id="last-updated"
+                    class="text-xs font-mono text-cyan-400 bg-cyan-900/20 px-2 py-1 rounded border border-cyan-500/20">
+                    Syncing...
+                </div>
+            </div>
+        </header>
+
+
+        <div class="p-6 space-y-6 max-w-7xl mx-auto w-full">
+
+            <!-- VIEW: Overview -->
+            <div id="view-overview" class="space-y-6 animate-fade-in">
+                <!-- Hero Row: Map & Analytics -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    <!-- World Map (2 cols) -->
+                    <!-- Fixed Aspect Ratio Container to match the image (2:1 for Equirectangular) -->
+                    <div
+                        class="lg:col-span-2 glass-panel rounded-2xl p-0 relative overflow-hidden flex items-center justify-center bg-[#0B1120]">
+                        <div class="relative w-full aspect-[2/1] max-h-full">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/8/80/World_map_-_low_resolution.svg"
+                                class="w-full h-full object-fill opacity-40 filter drop-shadow-[0_0_10px_rgba(59,130,246,0.3)]"
+                                alt="World Map">
+
+                            <!-- Dots Container Overlay -->
+                            <div id="map-dots-container" class="absolute inset-0 w-full h-full pointer-events-none">
+                                <!-- Dots injected by JS -->
+                            </div>
+                        </div>
+                        <h3
+                            class="absolute top-4 left-4 text-gray-400 text-sm font-semibold uppercase tracking-wider bg-black/40 px-2 py-1 rounded backdrop-blur-sm">
+                            Live Threat Map</h3>
+                    </div>
+
+                    <!-- Analytics (1 col) -->
+                    <div class="flex flex-col gap-6 h-full">
+                        <!-- Uptime Donut -->
+                        <div
+                            class="glass-panel rounded-2xl p-6 flex-1 flex flex-col items-center justify-center relative min-h-[200px]">
+                            <h3
+                                class="absolute top-6 left-6 text-gray-400 text-sm font-semibold uppercase tracking-wider">
+                                System Health</h3>
+                            <div class="h-40 w-40 relative">
+                                <canvas id="uptimeChart"></canvas>
+                                <div
+                                    class="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
+                                    <span class="text-2xl font-bold text-white">99.8%</span>
+                                    <span class="text-xs text-gray-400">Uptime</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Latency Line Chart -->
+                        <div class="glass-panel rounded-2xl p-6 flex-1 flex flex-col min-h-[200px]">
+                            <h3 class="text-gray-400 text-sm font-semibold uppercase tracking-wider mb-2">Avg Global
+                                Latency</h3>
+                            <div class="flex-1 relaitve w-full min-h-0">
+                                <!-- Flex-1 min-h-0 is crucial for ChartJS in Flex container -->
+                                <canvas id="latencyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Server Health List -->
+            <div id="view-health" class="space-y-6 hidden">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                    <span class="w-1 h-6 bg-cyan-500 rounded-full"></span>
+                    <span id="section-title">Monitored Endpoints</span>
+                </h3>
+                <div id="service-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Cards injected by JS -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        const API_URL = 'http://localhost:8000/status';
+        let currentTab = 'overview';
+
+        // --- Navigation Logic ---
+        function switchTab(tab) {
+            currentTab = tab;
+            const overviewEl = document.getElementById('view-overview');
+            const healthEl = document.getElementById('view-health');
+            const navOverview = document.getElementById('nav-overview');
+            const navHealth = document.getElementById('nav-health');
+
+            if (tab === 'overview') {
+                overviewEl.classList.remove('hidden');
+                healthEl.classList.add('hidden');
+
+                // Active Styles
+                navOverview.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 transition-all";
+                navHealth.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent transition-all";
+            } else {
+                overviewEl.classList.add('hidden');
+                healthEl.classList.remove('hidden');
+
+                // Active Styles
+                navHealth.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 transition-all";
+                navOverview.className = "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent transition-all";
+            }
+        }
+
+        // --- Charts Setup ---
+        // Uptime Chart
+        const uptimeCtx = document.getElementById('uptimeChart').getContext('2d');
+        const uptimeChart = new Chart(uptimeCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Up', 'Down'],
+                datasets: [{
+                    data: [5, 0],
+                    backgroundColor: ['#3b82f6', '#ef4444'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: { cutout: '75%', plugins: { legend: { display: false } } }
+        });
+
+        // Latency Chart
+        const latencyCtx = document.getElementById('latencyChart').getContext('2d');
+        const latencyChart = new Chart(latencyCtx, {
+            type: 'line',
+            data: {
+                labels: Array(20).fill(''),
+                datasets: [{
+                    label: 'ms',
+                    data: Array(20).fill(0),
+                    borderColor: '#22d3ee',
+                    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 0,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // Critical for flex containers
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 } }
+                    },
+                    x: { display: false }
+                },
+                plugins: { legend: { display: false } },
+                animation: { duration: 0 } // Performance
+            }
+        });
+
+        // --- Core Logic ---
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                updateDashboard(data);
+                updateTimestamp();
+            } catch (error) {
+                console.error('Fetch error:', error);
+            }
+        }
+
+        function updateDashboard(services) {
+            renderServices(services);
+            renderMap(services);
+            updateSideBar(services);
+            updateCharts(services);
+        }
+
+        function updateCharts(services) {
+            // Update Uptime
+            const upCount = services.filter(s => s.status === 'Up').length;
+            const downCount = services.length - upCount;
+            uptimeChart.data.datasets[0].data = [upCount, downCount];
+            uptimeChart.update();
+
+            // Update Latency (Random walk for demo visual)
+            const avgLatency = services.reduce((acc, s) => acc + s.latency, 0) / (services.length || 1);
+
+            const prevData = latencyChart.data.datasets[0].data;
+            prevData.shift();
+            prevData.push(avgLatency);
+            latencyChart.update();
+        }
+
+        function renderServices(services) {
+            const grid = document.getElementById('service-grid');
+            grid.innerHTML = '';
+
+            services.forEach(service => {
+                const isUp = service.status === 'Up';
+                const statusColor = isUp ? 'text-green-400' : 'text-red-400';
+
+                const card = document.createElement('div');
+                card.className = `glass-card rounded-xl p-5 relative overflow-hidden group`;
+                card.innerHTML = `
+                    <div class="absolute inset-0 bg-gradient-to-r ${isUp ? 'from-green-500/5' : 'from-red-500/10'} to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    
+                    <div class="flex justify-between items-start mb-2 relative z-10">
+                        <div class="bg-white/5 p-2 rounded-lg border border-white/5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 ${isUp ? 'text-cyan-400' : 'text-red-400'}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                        </div>
+                        <span class="px-2 py-1 rounded text-xs font-bold ${isUp ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} border ${isUp ? 'border-green-500/20' : 'border-red-500/20'}">
+                            ${service.status.toUpperCase()}
+                        </span>
+                    </div>
+
+                    <h3 class="text-lg font-bold text-gray-100 relative z-10 truncate">${service.name}</h3>
+                    <p class="text-xs text-gray-400 mb-4 relative z-10">${service.location.city}, ${service.location.country}</p>
+
+                    <div class="relative z-10">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-500">Latency</span>
+                            <span class="${isUp ? 'text-blue-300' : 'text-gray-600'} font-mono">${isUp ? service.latency + 'ms' : '--'}</span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                            <div class="bg-gradient-to-r from-cyan-400 to-blue-500 h-1.5 rounded-full" style="width: ${Math.min(service.latency / 5, 100)}%"></div>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function renderMap(services) {
+            const container = document.getElementById('map-dots-container');
+            container.innerHTML = ''; // Re-render pulses
+
+            // Coordinate bounds for simple equirectangular projection approximation on the image
+            // Note: This is a rough approximation for visual effect on the specific SVG used.
+            // Map Image is standard wikipedia equirectangular.
+            const mapWidth = container.clientWidth;
+            const mapHeight = container.clientHeight;
+
+            services.forEach(service => {
+                // Convert Lat/Lon to % x/y
+                // Longitude: -180 to 180 -> 0 to 100%
+                const xParams = (service.location.lon + 180) / 360 * 100;
+                // Latitude: 90 to -90 -> 0 to 100%
+                const yParams = (90 - service.location.lat) / 180 * 100;
+
+                const dot = document.createElement('div');
+                dot.className = `map-dot ${service.status === 'Down' ? 'down' : ''}`;
+                dot.style.left = `${xParams}%`;
+                dot.style.top = `${yParams}%`;
+
+                // Tooltip title
+                dot.title = `${service.name} (${service.location.city})`;
+
+                container.appendChild(dot);
+            });
+        }
+
+        function updateSideBar(services) {
+            const list = document.getElementById('location-list');
+            list.innerHTML = '';
+
+            services.forEach(service => {
+                const item = document.createElement('div');
+                item.className = 'px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer flex items-center justify-between group transition-colors';
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="w-2 h-2 rounded-full ${service.status === 'Up' ? 'bg-green-400' : 'bg-red-400'} shadow-[0_0_8px_currentColor]"></span>
+                        <span class="text-sm text-gray-400 group-hover:text-gray-200">${service.location.city}</span>
+                    </div>
+                    <span class="text-xs text-gray-600 font-mono group-hover:text-gray-400">${service.status}</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            document.getElementById('last-updated').innerText = `Synced: ${now.toLocaleTimeString()}`;
+        }
+
+        // Init
+        fetchStatus();
+        setInterval(fetchStatus, 3000);
+
+        // Resize observer for map
+        window.addEventListener('resize', fetchStatus);
+
+    </script>
+</body>
+
+</html>
