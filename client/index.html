@@ -342,6 +342,30 @@
 
         // --- Core Logic ---
 
+        async function fetchHistory() {
+            try {
+                const response = await fetch('/history'); // Proxy or direct? 
+                // Wait, HTML is served on 8080, Backend on 8000. 
+                // We need full URL: 'http://localhost:8000/history'
+                const res = await fetch('http://localhost:8000/history');
+                const data = await res.json();
+
+                // Data is likely [{service_name, latency, timestamp}, ...]
+                // We want global average latency for the chart, or just one service?
+                // The current chart is "Avg Global Latency".
+                // Let's group by timestamp roughly, or just take the last N points and average them if they share a timestamp?
+                // For simplicity in Phase 1, let's just reverse the list (it comes DESC) and plot the latency of the *first* service found per timestamp,
+                // OR better: Just map the raw latency points to the chart for a "busy" look, or calculate average.
+
+                // Let's just flatten it: Map the last 20 points from history to the chart.
+                const recent = data.slice(0, 20).reverse();
+                latencyChart.data.datasets[0].data = recent.map(d => d.latency);
+                latencyChart.update();
+            } catch (e) {
+                console.error("History fetch failed", e);
+            }
+        }
+
         async function fetchStatus() {
             try {
                 const response = await fetch(API_URL);
@@ -368,11 +392,13 @@
             uptimeChart.data.datasets[0].data = [upCount, downCount];
             uptimeChart.update();
 
-            // Update Latency (Random walk for demo visual)
-            const avgLatency = services.reduce((acc, s) => acc + s.latency, 0) / (services.length || 1);
+            // Update Latency (Real Average)
+            const validServices = services.filter(s => s.status === 'Up');
+            const avgLatency = validServices.length ?
+                validServices.reduce((acc, s) => acc + s.latency, 0) / validServices.length : 0;
 
             const prevData = latencyChart.data.datasets[0].data;
-            prevData.shift();
+            if (prevData.length > 20) prevData.shift();
             prevData.push(avgLatency);
             latencyChart.update();
         }
@@ -471,6 +497,7 @@
         }
 
         // Init
+        fetchHistory();
         fetchStatus();
         setInterval(fetchStatus, 3000);
 

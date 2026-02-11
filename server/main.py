@@ -1,10 +1,11 @@
 import asyncio
-import random
 import time
 from typing import List, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import httpx
+import database
 
 app = FastAPI(title="Cloud Pulse Backend")
 
@@ -20,10 +21,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configuration
-MOCK_MODE = True
-
 
 class Location(BaseModel):
     city: str
@@ -44,11 +41,11 @@ class ServiceStatus(BaseModel):
     message: Optional[str] = None
     location: Location
 
-# Define Services with Mock Locations
+# Services to monitor
 services_to_monitor = [
     Service(
         name="Google (US-East)", 
-        url="https://google.com", 
+        url="https://www.google.com", 
         location=Location(city="New York", country="USA", lat=40.7128, lon=-74.0060)
     ),
     Service(
@@ -57,61 +54,126 @@ services_to_monitor = [
         location=Location(city="San Francisco", country="USA", lat=37.7749, lon=-122.4194)
     ),
     Service(
-        name="Local Server 1 (EU)", 
-        ip="192.168.1.100", 
+        name="Cloudflare (EU)", 
+        url="https://www.cloudflare.com", 
         location=Location(city="London", country="UK", lat=51.5074, lon=-0.1278)
     ),
     Service(
-        name="Local Server 2 (APAC)", 
-        ip="192.168.1.101", 
+        name="Localhost (Test)", 
+        url="http://localhost:8080", 
         location=Location(city="Tokyo", country="Japan", lat=35.6762, lon=139.6503)
     ),
     Service(
-        name="NAS Storage (AU)", 
-        ip="192.168.1.102", 
+        name="Example Non-Existent", 
+        url="http://non-existent-service.test", 
         location=Location(city="Sydney", country="Australia", lat=-33.8688, lon=151.2093)
     ),
 ]
 
-async def check_service(service: Service) -> ServiceStatus:
-    # Simulate network delay
-    delay = random.uniform(0.05, 0.3)
-    await asyncio.sleep(delay)
-    
-    if MOCK_MODE:
-        # Randomly fail some services (20% chance)
-        is_up = random.random() > 0.2
-        
-        status = "Up" if is_up else "Down"
-        # If down, maybe longer timeout 'latency'
-        latency = delay * 1000 if is_up else 0
-        
-        return ServiceStatus(
-            name=service.name,
-            status=status,
-            latency=round(latency, 2),
-            message="Service is reachable" if is_up else "Connection timed out",
-            location=service.location
-        )
+# Background Monitoring Task
+async def monitor_services():
+    while True:
+        results = await asyncio.gather(*(perform_check(s) for s in services_to_monitor))
+        # Log results to DB
+        for i, status in enumerate(results):
+            # We log regardless of success/fail, status is "Up" or "Down"
+            # Note: perform_check returns ServiceStatus, stick to that.
+            pass
+        await asyncio.sleep(10)  # Check every 10 seconds
 
-    else:
-        # Real implementation would go here (using httpx or ping)
-        # For now, we fallback to mock since requirements specified Mock Mode
-        return ServiceStatus(
-            name=service.name,
-            status="Unknown",
-            latency=0,
-            message="Real monitoring not implemented yet"
-        )
+async def perform_check(service: Service) -> ServiceStatus:
+    start_time = time.time()
+    status = "Down"
+    latency = 0.0
+    message = ""
+
+    try:
+        if service.url:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(service.url)
+                latency = (time.time() - start_time) * 1000
+                if resp.status_code < 400:
+                    status = "Up"
+                    message = f"HTTP {resp.status_code}"
+                else:
+                    status = "Down" # Or Warning depending on logic, stick to binary for now
+                    message = f"HTTP {resp.status_code}"
+        elif service.ip:
+            # Simple ping
+            proc = await asyncio.create_subprocess_exec(
+                "ping", "-c", "1", "-W", "2", service.ip,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            latency = (time.time() - start_time) * 1000
+            if proc.returncode == 0:
+                status = "Up"
+                message = "Ping response received"
+            else:
+                status = "Down"
+                message = "Ping timeout"
+                latency = 0 # No latency if down? Or timeout value? Let's say 0.
+
+    except Exception as e:
+        status = "Down"
+        message = str(e)
+        latency = 0
+
+    # Log to DB
+    await database.log_check(service.name, status, latency)
+
+    return ServiceStatus(
+        name=service.name,
+        status=status,
+        latency=round(latency, 2),
+        message=message,
+        location=service.location
+    )
+
+@app.on_event("startup")
+async def startup_event():
+    await database.init_db()
+    asyncio.create_task(monitor_services())
 
 @app.get("/")
 def read_root():
-    return {"message": "Cloud Pulse Backend is running"}
+    return {"message": "Cloud Pulse Backend (Real Mode) Running"}
 
 @app.get("/status", response_model=List[ServiceStatus])
 async def get_status():
-    results = await asyncio.gather(*(check_service(s) for s in services_to_monitor))
-    return results
+    # Return LATEST status from DB for speed, or run check immediately?
+    # For now, let's run a quick check to ensure 'live' feel, OR fetch latest from DB if we trust the background worker.
+    # The requirement says "Real Monitoring Engine".
+    # Let's return the latest known state from DB to be fast, but if empty, run a check.
+    
+    # Actually, fetching from DB is faster and decouples checking from viewing.
+    # Let's try to get latest from DB.
+    latest = await database.get_latest_status([s.name for s in services_to_monitor])
+    
+    response = []
+    for service in services_to_monitor:
+        data = latest.get(service.name)
+        if data:
+            response.append(ServiceStatus(
+                name=service.name,
+                status=data["status"],
+                latency=data["latency"],
+                message="Last check: " + time.strftime('%H:%M:%S', time.localtime(data["timestamp"])),
+                location=service.location
+            ))
+        else:
+            # diverse checking if no history
+            # For minimal delay on first load, we could return a "Pending" or just wait.
+            # Let's wait for one check.
+            res = await perform_check(service)
+            response.append(res)
+            
+    return response
+
+@app.get("/history")
+async def get_history_endpoint():
+    return await database.get_history(50)
 
 if __name__ == "__main__":
     import uvicorn
